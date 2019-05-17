@@ -4,13 +4,14 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -27,6 +28,9 @@ class DownloadService : Service() {
     private lateinit var notificationManager: NotificationManager
     private lateinit var notificationBuilder: NotificationCompat.Builder
     private lateinit var connectivityManager: ConnectivityManager
+    private val networkRequest =
+        NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build()
 
     var bitmap: Bitmap? = null
         private set
@@ -35,18 +39,14 @@ class DownloadService : Service() {
     private val resultIntent = Intent(ACTION_DOWNLOAD)
 
     private var isDownloadCancelled = false
-    private var isNetworkAvailable = false
     private var imageURL: String = ""
 
     override fun onCreate() {
         super.onCreate()
-
         connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
         notificationBuilder = NotificationCompat.Builder(this, createNotificationChannel())
-
-        registerReceiver(connectivityReceiver, IntentFilter(ACTION_CONNECTIVITY))
+        connectivityManager.registerNetworkCallback(networkRequest, networkCallback)
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -54,28 +54,19 @@ class DownloadService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (isNetworkAvailable) startForeground(NOTIFICATION_ID, createNotification())
+        if (isConnectedToNetwork()) startForeground(NOTIFICATION_ID, createNotification())
         return START_STICKY
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        unregisterReceiver(connectivityReceiver)
+        connectivityManager.unregisterNetworkCallback(networkCallback)
     }
 
     fun downloadImage(imageURL: String) {
         this.imageURL = imageURL
-        if (isNetworkAvailable) {
-            Thread {
-                bitmap =
-                    BitmapFactory.decodeStream((URL(imageURL)).openConnection().getInputStream())
-                if (!isConnectedToNetwork()) {
-                    isDownloadCancelled = true
-                    resultIntent.putExtra(ACTION_SUCCESS, false)
-                }
-                sendBroadcast(resultIntent)
-                stopForeground(true)
-            }.start()
+        if (isConnectedToNetwork()) {
+            createDownloadThread()
         } else {
             isDownloadCancelled = true
         }
@@ -83,12 +74,22 @@ class DownloadService : Service() {
 
     private fun downloadImage() {
         startForeground(NOTIFICATION_ID, createNotification())
+        createDownloadThread()
+    }
+
+    private fun updateResultIntent() {
+        if (!isConnectedToNetwork()) {
+            isDownloadCancelled = true
+            resultIntent.putExtra(ACTION_SUCCESS, false)
+        } else {
+            resultIntent.putExtra(ACTION_SUCCESS, true)
+        }
+    }
+
+    private fun createDownloadThread() {
         Thread {
             bitmap = BitmapFactory.decodeStream((URL(imageURL)).openConnection().getInputStream())
-            if (!isConnectedToNetwork()) {
-                isDownloadCancelled = true
-                resultIntent.putExtra(ACTION_SUCCESS, false)
-            }
+            updateResultIntent()
             sendBroadcast(resultIntent)
             stopForeground(true)
         }.start()
@@ -119,26 +120,12 @@ class DownloadService : Service() {
         return activeNetwork.isConnected
     }
 
-    /**
-     * [BroadcastReceiver] that triggers when action [DownloadService.ACTION_CONNECTIVITY] occurs.
-     * Registered/Unregistered in onCreate/onDestroy.
-     *
-     * @author Alexander Gorin
-     */
-    private val connectivityReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            context?.let {
-                if (!isConnectedToNetwork()) {
-                    isNetworkAvailable = false
-                    resultIntent.putExtra(ACTION_SUCCESS, false)
-                } else {
-                    resultIntent.putExtra(ACTION_SUCCESS, true)
-                    isNetworkAvailable = true
-                }
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
 
-                if (isDownloadCancelled && isNetworkAvailable) {
-                    downloadImage()
-                }
+        override fun onAvailable(network: Network?) {
+            super.onAvailable(network)
+            if (isDownloadCancelled) {
+                downloadImage()
             }
         }
     }
@@ -153,6 +140,5 @@ class DownloadService : Service() {
         private const val CHANNEL_ID = "CHANNEL_ID"
         const val ACTION_DOWNLOAD = "com.example.serviceimagetask.ACTION_DOWNLOAD"
         const val ACTION_SUCCESS = "com.example.serviceimagetask.ACTION_SUCCESS"
-        private const val ACTION_CONNECTIVITY = "android.net.conn.CONNECTIVITY_CHANGE"
     }
 }

@@ -5,7 +5,6 @@ import android.content.*
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.IBinder
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -32,7 +31,7 @@ class DownloadFragment : Fragment() {
     private var isBound = false
     private var isDownloading = false
 
-    var bitmap: Bitmap? = null
+    private var bitmap: Bitmap? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
