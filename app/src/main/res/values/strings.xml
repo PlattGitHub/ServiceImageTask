@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">ServiceImageTask</string>
+
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="download_image">Download image</string>
+    <string name="download_channel_name">Download channel</string>
+    <string name="file_is_downloading">File is downloading</string>
+    <string name="downloaded_file">File has been downloaded</string>
+</resources>
