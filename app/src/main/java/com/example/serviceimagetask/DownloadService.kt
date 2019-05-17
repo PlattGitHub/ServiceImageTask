@@ -14,6 +14,7 @@ import android.net.ConnectivityManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.net.URL
 
@@ -26,6 +27,7 @@ class DownloadService : Service() {
 
     private lateinit var notificationManager: NotificationManager
     private lateinit var notificationBuilder: NotificationCompat.Builder
+    private lateinit var connectivityManager: ConnectivityManager
 
     var bitmap: Bitmap? = null
         private set
@@ -40,13 +42,11 @@ class DownloadService : Service() {
     override fun onCreate() {
         super.onCreate()
 
+        connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channelId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            createNotificationChannel()
-        } else {
-            ""
-        }
-        notificationBuilder = NotificationCompat.Builder(this, channelId)
+
+        notificationBuilder = NotificationCompat.Builder(this, createNotificationChannel())
+
         registerReceiver(connectivityReceiver, IntentFilter(ACTION_CONNECTIVITY))
     }
 
@@ -70,13 +70,12 @@ class DownloadService : Service() {
             Thread {
                 bitmap =
                     BitmapFactory.decodeStream((URL(imageURL)).openConnection().getInputStream())
-                if (!isConnectedToNetwork(this)) {
+                if (!isConnectedToNetwork()) {
                     isDownloadCancelled = true
                     resultIntent.putExtra(ACTION_SUCCESS, false)
                 }
                 sendBroadcast(resultIntent)
                 stopForeground(true)
-                stopSelf()
             }.start()
         } else {
             isDownloadCancelled = true
@@ -87,13 +86,12 @@ class DownloadService : Service() {
         startForeground(NOTIFICATION_ID, createNotification())
         Thread {
             bitmap = BitmapFactory.decodeStream((URL(imageURL)).openConnection().getInputStream())
-            if (!isConnectedToNetwork(this)) {
+            if (!isConnectedToNetwork()) {
                 isDownloadCancelled = true
                 resultIntent.putExtra(ACTION_SUCCESS, false)
             }
             sendBroadcast(resultIntent)
             stopForeground(true)
-            stopSelf()
         }.start()
     }
 
@@ -117,9 +115,8 @@ class DownloadService : Service() {
         return ""
     }
 
-    private fun isConnectedToNetwork(context: Context): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val activeNetwork = cm.activeNetworkInfo ?: return false
+    private fun isConnectedToNetwork(): Boolean {
+        val activeNetwork = connectivityManager.activeNetworkInfo ?: return false
         return activeNetwork.isConnected
     }
 
@@ -132,7 +129,7 @@ class DownloadService : Service() {
     private val connectivityReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             context?.let {
-                if (!isConnectedToNetwork(it)) {
+                if (!isConnectedToNetwork()) {
                     isNetworkAvailable = false
                     resultIntent.putExtra(ACTION_SUCCESS, false)
                 } else {

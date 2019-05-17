@@ -5,6 +5,7 @@ import android.content.*
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.IBinder
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -115,8 +116,8 @@ class DownloadFragment : Fragment() {
             if (intent?.action == DownloadService.ACTION_DOWNLOAD) {
                 if (intent.getBooleanExtra(DownloadService.ACTION_SUCCESS, false)) {
                     postImage()
+                    stopService()
                 }
-                stopService()
             }
         }
     }
